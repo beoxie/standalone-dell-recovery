@@ -46,7 +46,7 @@ DBUS_BUS_NAME = 'com.dell.RecoveryMedia'
 DBUS_INTERFACE_NAME = 'com.dell.RecoveryMedia'
 
 #For install time
-CDROM_MOUNT = '/cdrom'
+CDROM_MOUNT = '/usr/lib/live/mount/medium'
 ISO_MOUNT = '/isodevice'
 
 #Translation Support

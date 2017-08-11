@@ -37,11 +37,6 @@ def files_only(directory):
                 array.append(os.path.join(directory, file))
             return array
 
-class SecureBootBuild(build_extra.build_extra):
-    def run(self):
-        subprocess.Popen(['make'], cwd='secure_boot')
-        build_extra.build_extra.run(self)
-
 I18NFILES = []
 for filepath in glob.glob("po/mo/*/LC_MESSAGES/*.mo"):
     lang = filepath[len("po/mo/"):]
@@ -49,39 +44,24 @@ for filepath in glob.glob("po/mo/*/LC_MESSAGES/*.mo"):
     I18NFILES.append((targetpath, [filepath]))
 
 setup(
-    name="dell-recovery",
-    author="Mario Limonciello",
-    author_email="Mario_Limoncielo@Dell.com",
-    maintainer="Mario Limonciello",
-    maintainer_email="Mario_Limonciello@Dell.com",
+    name="standalone-dell-recovery",
+    author="Kevin Rustin Wang",
+    author_email="Kevin_Rustin_Wang@Dell.com",
+    maintainer="Kevin Rustin Wang",
+    maintainer_email="Kevin_Rustin_Wang@Dell.com",
     url="http://linux.dell.com/",
     license="gpl",
-    description="Creates a piece of recovery media for a Dell Factory image",
+    description="Creates a piece of standalone recovery media for Dell Factory Install",
     packages=["Dell"],
-    data_files=[("share/dell", glob.glob("gtk/*.ui")),
-                ('share/dell/bin', ['bto-autobuilder/dell-bto-autobuilder']),
-                ('share/pixmaps', glob.glob("gtk/*.svg")),
-                ('share/dell/bin', ['backend/recovery-media-backend']),
-                ('lib/dell/x86_64/', glob.glob('secure_boot/*.efi')),
-                ('share/dell/casper/scripts', glob.glob('casper/scripts/*')),
-                ('share/dell/casper/hooks', glob.glob('casper/hooks/*')),
-                ('share/dell/casper/seeds', glob.glob('casper/seeds/*')),
-                ('share/dell/scripts', glob.glob('late/scripts/*')),
-                ('share/dell/scripts/non-negotiable', glob.glob('late/chroot_scripts/*')),
+    data_files=[('share/dell/bin', ['backend/recovery-media-backend']),
                 ('/etc/dbus-1/system.d/', glob.glob('backend/*.conf')),
-                ('share/dell/grub', files_only('grub')),
-                ('share/dell/grub/theme', files_only('grub/theme')),
-                ('share/dell/grub/theme/dell', files_only('grub/theme/dell')),
-                ('share/dell/grub/theme/x86_64-efi', files_only('grub/theme/x86_64-efi')),
+                ('share/pixmaps', glob.glob("gtk/*.svg")),
                 ('share/dbus-1/system-services', glob.glob('backend/*.service')),
                 ('/lib/udev/rules.d', glob.glob('udev/*')),
-                ('lib/ubiquity/plugins', glob.glob('ubiquity/*.py')),
-                ('share/ubiquity/gtk', glob.glob('ubiquity/*.ui')),
-                ('share/ubiquity', ['ubiquity/dell-bootstrap'])]+I18NFILES,
-    scripts=["dell-recovery", "dell-driver-installer"],
+                ('share/dell/scripts', glob.glob('startup/*.py')),
+                ('share/dell/gtk', glob.glob('gtk/*.ui'))]+I18NFILES,
 
-    cmdclass = { 'build': SecureBootBuild,
-                 'build_i18n': build_i18n.build_i18n,
+    cmdclass = { 'build_i18n': build_i18n.build_i18n,
                  "build_help" : build_help.build_help,
                  'build_icons': build_icons.build_icons,
                  'clean': clean_i18n.clean_i18n,
