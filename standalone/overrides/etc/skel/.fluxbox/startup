@@ -1,0 +1,8 @@
+#!/bin/sh
+if grep developer /proc/cmdline >/dev/null; then
+	xterm &
+else
+#	dell-recovery-standalone &
+        python3 /usr/share/dell/scripts/dell-bootstrap.py &
+fi
+exec fluxbox

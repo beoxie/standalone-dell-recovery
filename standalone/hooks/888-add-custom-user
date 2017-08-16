@@ -1,0 +1,6 @@
+#!/bin/bash
+# add user and set default groups
+useradd dell -G users,adm,sudo
+echo " set default passwords "
+echo "dell:dell" | chpasswd
+echo "root:unknown" | chpasswd

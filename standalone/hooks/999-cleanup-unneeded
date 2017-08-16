@@ -1,0 +1,9 @@
+#!/bin/sh
+
+apt purge -y python3-distutils-extra git
+apt autoremove -y
+
+
+#This is needed because the dell-recovery backend
+# will need this to start from dbus activation
+touch /etc/default/locale
