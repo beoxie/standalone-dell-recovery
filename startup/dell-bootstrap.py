@@ -23,7 +23,7 @@
 # Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ################################################################################
 
-import Dell.misc as misc
+import Dell.standalone as misc
 from threading import Thread
 import threading
 import time
