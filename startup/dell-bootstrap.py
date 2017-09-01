@@ -73,6 +73,8 @@ class StandalonePageGtk:
         self.automated_recovery = self.builder.get_object('automated_recovery')
         self.automated_recovery_box = self.builder.get_object('automated_recovery_box')
         self.automated_combobox = self.builder.get_object('hard_drive_combobox')
+        self.BaseImage_combobox = self.builder.get_object('Base_Image_combobox')
+        self.FISH_combobox = self.builder.get_object('FISH_Manifest_combobox')
         self.hidden_radio = self.builder.get_object('hidden_radio')
         self.info_box = self.builder.get_object('info_box')
         self.info_spinner = Gtk.Spinner()
@@ -94,6 +96,8 @@ class StandalonePageGtk:
         #Device detected variables
         self.device = None
         self.standalone = None
+        self.fish_file = None
+        self.base_file = None
         self.prepare()
 
     def get_selected_device(self,widget):
@@ -105,9 +109,25 @@ class StandalonePageGtk:
             device = model[iterator][0]
             self.device = device
 
-    def toggle_type(self, widget):
-        """Allows the user to go forward after they've made a selection'"""
-        self.automated_combobox.set_sensitive(self.automated_recovery.get_active())
+    def get_selected_BaseImage(self,widget):
+        """Returns the selected device from the GUI"""
+        base_file = ''
+        iterator = self.BaseImage_combobox.get_active_iter()
+        if iterator is not None:
+            model = self.BaseImage_combobox.get_model()
+            base_file = model[iterator][1]
+            print(base_file)
+            self.base_file = base_file
+
+    def get_selected_FishManifest(self,widget):
+        """Returns the selected device from the GUI"""
+        fish_file = ''
+        iterator = self.FISH_combobox.get_active_iter()
+        if iterator is not None:
+            model = self.FISH_combobox.get_model()
+            fish_file = model[iterator][1]
+            print(fish_file)
+            self.fish_file = fish_file
 
     def show_dialog(self, which, data = None):
         """Shows a dialog"""
@@ -131,10 +151,31 @@ class StandalonePageGtk:
         #populate the devices
         liststore = self.automated_combobox.get_model()
         for device in devices:
-            # print(device)
             liststore.append(device)
         #default to the first item active (it should be sorted anyway)
         self.automated_combobox.set_active(0)
+
+    def populate_base_images(self, images):
+        """Feeds a selection of devices into the GUI
+           devices should be an array of 3 column arrays
+        """
+        #populate the devices
+        liststore = self.BaseImage_combobox.get_model()
+        for image in images:
+            liststore.append(image)
+        #default to the first item active (it should be sorted anyway)
+        self.BaseImage_combobox.set_active(0)
+
+    def populate_fish_manifest(self, fishes):
+        """Feeds a selection of devices into the GUI
+           devices should be an array of 3 column arrays
+        """
+        #populate the devices
+        liststore = self.FISH_combobox.get_model()
+        for fish in fishes:
+            liststore.append(fish)
+        #default to the first item active (it should be sorted anyway)
+        self.FISH_combobox.set_active(0)
 
     ##                      ##
     ## Advanced GUI options ##
@@ -248,6 +289,42 @@ class StandalonePageGtk:
         #populate UI
         self.populate_devices(disks)
 
+    def check_OS_label(self,name):
+        import tarfile
+        with tarfile.open(name) as tf:
+            for entry in tf:
+                if "prepackage.dell" in entry.name:
+                    fd = tf.extractfile(entry)
+                    for item in fd.readlines():
+                        line = str(item)
+                        if "<os>" in line:
+                            name = line.split("<os>")[1].split("</os>")[0]
+                            if name == "16.04":
+                                return "UBX"
+                            if name == "SP3":
+                                return "NKX"
+                            if name == "7.3":
+                                return "RCX"
+
+    def fixup_recovery_images(self,root_dir):
+        images = []
+        fishes = ['']
+        for root,dirs,files in os.walk(root_dir):
+            for f in files:
+                file_type = os.path.basename(f).split('.')
+                if file_type[-1] == 'zip':
+                    if file_type[-2] == 'base':
+                        images.append([file_type[0],os.path.join(root,f)])
+                elif file_type[-1] == 'gz':
+                    if file_type[-2] == 'tar':
+                        if file_type[-3] == 'fish':
+                            #check linux os type
+                            OS_label ='(' + self.check_OS_label(os.path.join(root,f)) + ')'
+                            fishes.append([file_type[0] + OS_label,os.path.join(root,f)])
+
+        self.populate_base_images(images)
+        self.populate_fish_manifest(fishes)
+
     def prepare(self):
         """Prepare the Debconf portion of the plugin and gather all data"""
         mount = find_boot_device()
@@ -284,6 +361,7 @@ class StandalonePageGtk:
         #Clarify which device we're operating on initially in the UI
         try:
             self.fixup_recovery_devices()
+            self.fixup_recovery_images(magic.CDROM_MOUNT)
         except Exception as err:
             self.handle_exception(err)
             self.cancel_handler()
@@ -298,6 +376,12 @@ class StandalonePageGtk:
         Gdk.threads_leave()
         time.sleep(0.3)
 
+    def clear_disk(self,widget):
+        """Erase all the content of the chosen disk"""
+        try:
+            misc.execute_root('parted','-s',self.device,'rm',EFI_ESP_PARTITION)
+        except Exception:
+            pass
 
     def cleanup(self, widget):
         """Do all the real processing like winPE FID.
@@ -354,8 +438,65 @@ class StandalonePageGtk:
             raise RuntimeError("Attempting to install to the same device as booted from.\n\
         You will need to clear the contents of the recovery partition\n\
         manually to proceed.")
+            # check base image and fish manifest
+
+            # if glob.glob(magic.CDROM_MOUNT + '/SourceImage/*.base.zip'):
+        if self.base_file:
+            base_zip = self.base_file
+            fish_file = None
+            if self.fish_file:
+                fish_file = self.fish_file
+                # resize /tmp file size
+            command = ('mount', '-o', 'remount,size=15g', '/tmp')
+            result = misc.execute_root(*command)
+            if result is False:
+                self.handle_exception("Error Resize the /tmp Size")
+                raise RuntimeError("Error Resize the /tmp Size")
+            # command = ('mount', '-o', 'remount,rw', magic.CDROM_MOUNT)
+            # result = misc.execute_root(*command)
+            # if result is False:
+            #     self.handle_exception("Error changing write right on CDROM_MOUNT")
+            #     raise RuntimeError("Error changing write right on CDROM_MOUNT")
+
+            # image_folder = os.path.join(magic.CDROM_MOUNT, 'IMAGE')
+            image_folder = os.path.join('/tmp', 'IMAGE')
+            if os.path.exists(image_folder):
+                shutil.rmtree(image_folder)
+            os.mkdir(image_folder)
+
+            import zipfile
+            zf = zipfile.ZipFile(base_zip)
+            zf_size = sum(map(lambda x: getattr(x, "file_size"), zf.infolist()))
+            size_thread = ProgressBySize("Extracting the Base Image ...",
+                                         image_folder,
+                                         zf_size)
+            size_thread.progress = self.report_progress
+            size_thread.reset_write(zf_size)
+            size_thread.set_starting_value(2)
+            size_thread.start()
+            zf.extractall(path=image_folder)
+            zf.close()
+            size_thread.join()
+
+            if fish_file:
+                import tarfile
+                zf = tarfile.open(fish_file)
+                tarfile_size = sum(map(lambda x: getattr(x, "size"), zf.getmembers()))
+                zf_size += tarfile_size
+                size_thread = ProgressBySize("Extracting the Fish packages ...",
+                                             image_folder,
+                                             zf_size)
+                size_thread.progress = self.report_progress
+                size_thread.reset_write(zf_size)
+                size_thread.set_starting_value(2)
+                size_thread.start()
+                zf.extractall(path=image_folder)
+                zf.close()
+                size_thread.join()
+            black_pattern = re.compile(".*\.base\.zip|.*\.fish\.tar\.gz")
+
         # Calculate RP size
-        rp_size = magic.black_tree("size", black_pattern, magic.CDROM_MOUNT + "/IMAGE")
+        rp_size = magic.black_tree("size", black_pattern, image_folder)
         # in mbytes
         rp_size_mb = (rp_size / 1000000) + cushion
 
@@ -399,7 +540,7 @@ class StandalonePageGtk:
         part_label = 'OS'
 
         # Change file system if installed RCX
-        if os.path.exists(magic.CDROM_MOUNT + '/IMAGE/rcx.flg'):
+        if os.path.exists(image_folder + '/rcx.flg'):
             # Set RCX variable parameters
             file_format = 'ext2'
             file_type = 'mkfs.ext2'
@@ -435,7 +576,7 @@ class StandalonePageGtk:
 
         # Build RP filesystem
         self.report_progress(_('Formatting Partitions'), 200)
-        if os.path.exists(magic.CDROM_MOUNT + '/IMAGE/rcx.flg'):
+        if os.path.exists(image_folder + '/rcx.flg'):
             command = (file_type, '-F', file_para, part_label, self.device + rp_part)
         else:
             command = (file_type, file_para, part_label, self.device + rp_part)
@@ -465,12 +606,12 @@ class StandalonePageGtk:
         with misc.raised_privileges():
             if os.path.exists(magic.ISO_MOUNT):
                 magic.black_tree("copy", re.compile(".*\.iso$"), magic.ISO_MOUNT + '/IMAGE', '/mnt')
-            magic.black_tree("copy", black_pattern, magic.CDROM_MOUNT + '/IMAGE', '/mnt')
+            magic.black_tree("copy", black_pattern, image_folder, '/mnt')
 
         size_thread.join()
 
         # combine the RCX iso image as its size is too larger to store in vfat sticky
-        if os.path.exists(magic.CDROM_MOUNT + '/IMAGE/rcx.flg'):
+        if os.path.exists(image_folder + '/rcx.flg'):
             # lock.acquire()
             tgz_file = "/tmp/RCX_ISO.tar.gz"
             with misc.raised_privileges():
@@ -521,15 +662,22 @@ class StandalonePageGtk:
                     break
 
             with misc.raised_privileges():
-                magic.process_conf_file(magic.CDROM_MOUNT + '/IMAGE/factory/grub.cfg', \
+                magic.process_conf_file(image_folder + '/factory/grub.cfg', \
                                         '/mnt/factory/grub.cfg', uuid, EFI_RP_PARTITION)
 
         # Install grub
         self.report_progress(_('Installing GRUB'), 880)
 
         ##If we don't have grub binaries, build them
-        grub_files = [magic.CDROM_MOUNT + '/IMAGE/efi/boot/bootx64.efi',
-                      magic.CDROM_MOUNT + '/IMAGE/efi/boot/grubx64.efi']
+        # grub_files = [image_folder + '/efi/boot/bootx64.efi',
+        #               image_folder + '/efi/boot/grubx64.efi']
+        grub_files = []
+        for root,dirs,files in os.walk(image_folder):
+            for f in files:
+                if f.lower() == "bootx64.efi":
+                    grub_files.append(os.path.join(root,f))
+                if f.lower() == "grubx64.efi":
+                    grub_files.append(os.path.join(root,f))
 
         ##Mount ESP
         if not os.path.exists(os.path.join('/mnt', 'efi')):
@@ -558,7 +706,7 @@ class StandalonePageGtk:
             # delete old entries
             for line in bootmgr_output:
                 bootnum = ''
-                if line.startswith('Boot') and 'LinuxIns' in line.lower():
+                if line.startswith('Boot') and 'linuxins' in line.lower():
                     bootnum = line.split('Boot')[1].replace('*', '').split()[0]
                 if bootnum:
                     bootmgr = misc.execute_root('efibootmgr', '-v', '-b', bootnum, '-B')
@@ -569,12 +717,16 @@ class StandalonePageGtk:
         target = 'shimx64.efi'
         source = 'bootx64.efi'
         # RCX bootloader source file name is different
-        if os.path.exists(magic.CDROM_MOUNT + '/IMAGE/rcx.flg'):
+        if os.path.exists(image_folder + '/rcx.flg'):
             source = 'grubx64.efi'
 
         with misc.raised_privileges():
-            os.rename(os.path.join(direct_path, source),
-                      os.path.join(direct_path, target))
+            for f in os.listdir(direct_path):
+                if f.lower() == source:
+                    os.rename(os.path.join(direct_path, f),
+                              os.path.join(direct_path, target))
+            # os.rename(os.path.join(direct_path, source),
+            #           os.path.join(direct_path, target))
 
         add = misc.execute_root('efibootmgr', '-v', '-c', '-d', self.device, '-p', EFI_ESP_PARTITION, '-l',
                                 '\\EFI\\linux\\%s' % target, '-L', 'LinuxIns')
@@ -593,7 +745,7 @@ class StandalonePageGtk:
         with misc.raised_privileges():
             if os.path.exists(magic.ISO_MOUNT):
                 shutil.copy(magic.ISO_MOUNT + '/IMAGE/factory/grub.cfg', '/mnt/efi/EFI/linux/grub.cfg')
-            shutil.copy(magic.CDROM_MOUNT + '/IMAGE/factory/grub.cfg', '/mnt/efi/EFI/linux/grub.cfg')
+            shutil.copy(image_folder + '/factory/grub.cfg', '/mnt/efi/EFI/linux/grub.cfg')
 
         ##clean up ESP mount
         misc.execute_root('umount', '/mnt/efi')

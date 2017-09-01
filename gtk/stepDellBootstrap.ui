@@ -4,7 +4,9 @@
   <requires lib="gtk+" version="3.0"/>
   <object class="GtkListStore" id="base_image_liststore">
     <columns>
-      <!-- column-name image -->
+      <!-- column-name name -->
+      <column type="gchararray"/>
+      <!-- column-name path -->
       <column type="gchararray"/>
     </columns>
   </object>
@@ -47,7 +49,9 @@
   </object>
   <object class="GtkListStore" id="fish_manifest_liststore">
     <columns>
-      <!-- column-name fish -->
+      <!-- column-name name -->
+      <column type="gchararray"/>
+      <!-- column-name path -->
       <column type="gchararray"/>
     </columns>
   </object>
@@ -89,8 +93,22 @@
               </packing>
             </child>
             <child>
+              <object class="GtkButton" id="button4">
+                <property name="label" translatable="yes">Clear</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <signal name="clicked" handler="clear_disk" swapped="no"/>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+            <child>
               <object class="GtkButton" id="button2">
-                <property name="label" translatable="yes">OK</property>
+                <property name="label" translatable="yes">Install</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
@@ -99,7 +117,7 @@
               <packing>
                 <property name="expand">True</property>
                 <property name="fill">True</property>
-                <property name="position">1</property>
+                <property name="position">2</property>
               </packing>
             </child>
           </object>
@@ -796,33 +814,6 @@
               <placeholder/>
             </child>
             <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
               <object class="GtkComboBox" id="recovery_partition_filesystem_checkbox">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
@@ -888,57 +879,6 @@
               </packing>
             </child>
             <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
-              <placeholder/>
-            </child>
-            <child>
               <object class="GtkLabel" id="label5">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
@@ -972,13 +912,6 @@
               </packing>
             </child>
             <child>
-              <object class="GtkLabel" id="label1">
-                <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Disable Proprietary Drivers</property>
-              </object>
-            </child>
-            <child>
               <object class="GtkLabel" id="label2">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
@@ -1005,6 +938,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="model">base_image_liststore</property>
+                <signal name="changed" handler="get_selected_BaseImage" swapped="no"/>
                 <child>
                   <object class="GtkCellRendererText" id="cellrenderertext2"/>
                   <attributes>
@@ -1026,6 +960,7 @@
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="model">fish_manifest_liststore</property>
+                <signal name="changed" handler="get_selected_FishManifest" swapped="no"/>
                 <child>
                   <object class="GtkCellRendererText" id="cellrenderertext5"/>
                   <attributes>
@@ -1041,6 +976,18 @@
                 <property name="x_options">GTK_FILL</property>
                 <property name="y_options"/>
               </packing>
+            </child>
+            <child>
+              <placeholder/>
+            </child>
+            <child>
+              <placeholder/>
+            </child>
+            <child>
+              <placeholder/>
+            </child>
+            <child>
+              <placeholder/>
             </child>
           </object>
           <packing>
