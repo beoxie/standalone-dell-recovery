@@ -27,7 +27,7 @@ import Dell.standalone as misc
 from threading import Thread
 import threading
 import time
-from Dell.recovery_threading import ProgressBySize
+from Dell.recovery_threading import ProgressBySize,ProgressByPulse
 import Dell.recovery_common as magic
 from Dell.recovery_xml import BTOxml
 import os
@@ -77,15 +77,17 @@ class StandalonePageGtk:
         self.FISH_combobox = self.builder.get_object('FISH_Manifest_combobox')
         self.hidden_radio = self.builder.get_object('hidden_radio')
         self.info_box = self.builder.get_object('info_box')
+        self.status_label = self.builder.get_object('status_warning_label')
         self.info_spinner = Gtk.Spinner()
         self.builder.get_object('info_spinner_box').add(self.info_spinner)
         self.restart_box = self.builder.get_object('restart_box')
         self.err_dialog = self.builder.get_object('err_dialog')
-        self.log_dialog = self.builder.get_object('log_dialog')
+        self.info_dialog = self.builder.get_object('info_dialog')
         global install_progress
         install_progress = self.builder.get_object('install_progress')
         global install_progress_text
         install_progress_text = self.builder.get_object('install_progress_text')
+
         #advanced page widgets
         icon = self.builder.get_object('dell_image')
         icon.set_tooltip_markup("Dell Recovery Advanced Options")
@@ -132,10 +134,11 @@ class StandalonePageGtk:
     def show_dialog(self, which, data = None):
         """Shows a dialog"""
         if which == "info":
-            self.automated_recovery_box.hide()
+            # self.automated_recovery_box.hide()
+            self.status_label.set_label('<b>'+str(data)+'</b>')
             self.info_box.show_all()
             self.info_spinner.start()
-            self.toggle_progress()
+            # self.toggle_progress()
         else:
             self.info_spinner.stop()
             if which == "exception":
@@ -180,10 +183,32 @@ class StandalonePageGtk:
     ##                      ##
     ## Advanced GUI options ##
     ##                      ##
+
     def toggle_advanced(self, widget, data = None):
         """Shows the advanced page"""
+        status = threading.Thread(target = self.update_status)
+        status.daemon = True
+        status.start()
+        # self.update_status()
+
+    def update_status(self):
+        # self.info_box.show_all()
+        self.status_label.set_label('<b>' + str("Parsing the Images and Packages") + '</b>')
+        self.info_box.show_all()
+        self.info_spinner.start()
+        status, package = self.fixup_recovery_images(magic.CDROM_MOUNT)
+        if not status:
+            Gdk.threads_enter()
+            self.show_dialog("exception", "FISH package <%s> File 'prepackage.dell' is missing!!!" % (package))
+            Gdk.threads_leave()
+            return
+
+        self.info_spinner.stop()
+        self.info_box.hide()
+        Gdk.threads_enter()
         self.advanced_page.run()
         self.advanced_page.hide()
+        Gdk.threads_leave()
 
     def set_advanced(self, item, value):
         """Populates the options that should be on the advanced page"""
@@ -305,6 +330,8 @@ class StandalonePageGtk:
                                 return "NKX"
                             if name == "7.3":
                                 return "RCX"
+                            return "Unknow"
+            return False
 
     def fixup_recovery_images(self,root_dir):
         images = []
@@ -319,11 +346,15 @@ class StandalonePageGtk:
                     if file_type[-2] == 'tar':
                         if file_type[-3] == 'fish':
                             #check linux os type
-                            OS_label ='(' + self.check_OS_label(os.path.join(root,f)) + ')'
+                            if self.check_OS_label(os.path.join(root,f)):
+                                OS_label ='(' + self.check_OS_label(os.path.join(root,f)) + ')'
+                            else:
+                                return False,f
                             fishes.append([file_type[0] + OS_label,os.path.join(root,f)])
 
         self.populate_base_images(images)
         self.populate_fish_manifest(fishes)
+        return True,f
 
     def prepare(self):
         """Prepare the Debconf portion of the plugin and gather all data"""
@@ -361,7 +392,6 @@ class StandalonePageGtk:
         #Clarify which device we're operating on initially in the UI
         try:
             self.fixup_recovery_devices()
-            self.fixup_recovery_images(magic.CDROM_MOUNT)
         except Exception as err:
             self.handle_exception(err)
             self.cancel_handler()
@@ -379,7 +409,23 @@ class StandalonePageGtk:
     def clear_disk(self,widget):
         """Erase all the content of the chosen disk"""
         try:
+            self.show_dialog("info", "Clearing the Disk")
             misc.execute_root('parted','-s',self.device,'rm',EFI_ESP_PARTITION)
+            #double confirm the partition is removed
+            with open("/proc/partitions","r") as rfd:
+                mid = ''
+                if '/dev/nvme' in self.device or '/dev/mmcblk' in self.device:
+                    mid = 'p'
+                for line in rfd.readlines():
+                    if self.device + mid + EFI_ESP_PARTITION in line:
+                        self.show_dialog("exception","ESP partition is removed with failure!")
+                        return
+            self.info_spinner.stop()
+            self.info_dialog.format_secondary_text(str("clear the disk is done!"))
+            self.info_dialog.run()
+            self.info_dialog.hide()
+            self.info_box.hide()
+
         except Exception:
             pass
 
@@ -440,7 +486,6 @@ class StandalonePageGtk:
         manually to proceed.")
             # check base image and fish manifest
 
-            # if glob.glob(magic.CDROM_MOUNT + '/SourceImage/*.base.zip'):
         if self.base_file:
             base_zip = self.base_file
             fish_file = None
@@ -452,13 +497,7 @@ class StandalonePageGtk:
             if result is False:
                 self.handle_exception("Error Resize the /tmp Size")
                 raise RuntimeError("Error Resize the /tmp Size")
-            # command = ('mount', '-o', 'remount,rw', magic.CDROM_MOUNT)
-            # result = misc.execute_root(*command)
-            # if result is False:
-            #     self.handle_exception("Error changing write right on CDROM_MOUNT")
-            #     raise RuntimeError("Error changing write right on CDROM_MOUNT")
 
-            # image_folder = os.path.join(magic.CDROM_MOUNT, 'IMAGE')
             image_folder = os.path.join('/tmp', 'IMAGE')
             if os.path.exists(image_folder):
                 shutil.rmtree(image_folder)
@@ -512,7 +551,7 @@ class StandalonePageGtk:
 
         self.report_progress("Creating Partitions", 100)
         grub_size = 250
-        commands = [('parted', '-a', 'optimal', '-s', self.device, 'mkpart', 'primary', 'fat16', '0', str(grub_size)),
+        commands = [('parted', '-a', 'optimal', '-s', self.device, 'mkpart', 'primary', 'fat32', '0', str(grub_size)),
                     ('parted', '-s', self.device, 'name', '1', "'EFI System Partition'"),
                     ('parted', '-s', self.device, 'set', '1', 'boot', 'on')]
         if '/dev/nvme' in self.device or '/dev/mmcblk' in self.device:
@@ -668,9 +707,6 @@ class StandalonePageGtk:
         # Install grub
         self.report_progress(_('Installing GRUB'), 880)
 
-        ##If we don't have grub binaries, build them
-        # grub_files = [image_folder + '/efi/boot/bootx64.efi',
-        #               image_folder + '/efi/boot/grubx64.efi']
         grub_files = []
         for root,dirs,files in os.walk(image_folder):
             for f in files:
@@ -725,8 +761,6 @@ class StandalonePageGtk:
                 if f.lower() == source:
                     os.rename(os.path.join(direct_path, f),
                               os.path.join(direct_path, target))
-            # os.rename(os.path.join(direct_path, source),
-            #           os.path.join(direct_path, target))
 
         add = misc.execute_root('efibootmgr', '-v', '-c', '-d', self.device, '-p', EFI_ESP_PARTITION, '-l',
                                 '\\EFI\\linux\\%s' % target, '-L', 'LinuxIns')
