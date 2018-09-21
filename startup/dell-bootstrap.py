@@ -46,7 +46,7 @@ from gi.repository import Gtk
 
 
 #redefine the path of CDROM
-# magic.CDROM_MOUNT = '/usr/lib/live/mount/medium'
+magic.CDROM_MOUNT = '/lib/live/mount/medium'
 
 #Translation support
 from gettext import gettext as _
